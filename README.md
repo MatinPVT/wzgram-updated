@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/rjriajul/wzgram/dev/assets/png/wzgram-icon-256.png" alt="wzgram" width="160">
+<img src="https://raw.githubusercontent.com/MatinPVT/wzgram-updated/main/assets/png/wzgram-icon-256.png" alt="wzgram" width="160">
 
 # wzgram
 
