@@ -70,10 +70,9 @@ class WidgetQueryWallet(Object):
 class WidgetQueryTypeData(Object):
     """The query contains data for the bot.
 
-    Parameters:
-        type (``str``):
-            Type of the query, always "data".
+    The ``type`` attribute is always "data".
 
+    Parameters:
         wallet_card (JSON value, *optional*):
             TON wallet card of the user who sent the query, if it was sent
             to the bot along with the query. Kept as the raw Bot API value:
@@ -100,10 +99,9 @@ class WidgetQueryTypeSignData(Object):
 
     The data is signed for the domain ``bot<bot_id>``.
 
-    Parameters:
-        type (``str``):
-            Type of the query, always "sign_data".
+    The ``type`` attribute is always "sign_data".
 
+    Parameters:
         wallet (:obj:`~pyrogram.types.WidgetQueryWallet`):
             The wallet that signed the data.
 
@@ -135,10 +133,9 @@ class WidgetQueryTypeSignData(Object):
 class WidgetQueryTypeSentTransaction(Object):
     """The query notifies the bot about a transaction sent from a TON wallet.
 
-    Parameters:
-        type (``str``):
-            Type of the query, always "sent_transaction".
+    The ``type`` attribute is always "sent_transaction".
 
+    Parameters:
         wallet (:obj:`~pyrogram.types.WidgetQueryWallet`):
             The wallet from which the transaction was sent.
 
