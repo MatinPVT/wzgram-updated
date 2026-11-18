@@ -51,6 +51,13 @@ class SendWidget:
 
         .. include:: /_includes/usable-by/bots.rst
 
+        In production, widgets can currently be sent only to private chats
+        and automatically have protected content. Group chats work on the
+        Telegram test server.
+
+        Set widget_transport="mtproto" on the client for native layer 233
+        calls. The default "botapi" transport uses the HTTPS bridge.
+
         Parameters:
             chat_id (``int`` | ``str``):
                 Unique identifier or username of the target chat.
@@ -60,15 +67,16 @@ class SendWidget:
                 after zlib level 9 compression. Widgets cannot access the network.
 
             chat_data (JSON value | ``str``, *optional*):
-                Initial state, at most 1,024 bytes of JSON. A JSON-encoded string
-                is also accepted. Defaults to an empty object.
+                Initial state, at most 1,024 UTF-8 bytes. Strings are sent
+                unchanged; Python JSON values are serialized. Defaults to "{}".
 
             allow_queries (``bool``, *optional*):
                 Allow the widget to send queries to the bot. Defaults to False.
 
             public_data (JSON value | ``str``, *optional*):
-                Public data, at most 1,024 bytes of JSON, available wherever
-                the widget is shown. All messages with a shared widget have
+                Public data, at most 1,024 UTF-8 bytes, available wherever
+                the widget is shown. Strings are sent unchanged; Python JSON
+                values are serialized. All messages with a shared widget have
                 the same public data.
 
             width (``int``, *optional*):

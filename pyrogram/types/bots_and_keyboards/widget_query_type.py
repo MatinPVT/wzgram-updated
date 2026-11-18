@@ -16,6 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with Pyrogram.  If not, see <http://www.gnu.org/licenses/>.
 
+import base64
 from typing import Any, Optional
 
 import pyrogram
@@ -58,6 +59,13 @@ class WidgetQueryWallet(Object):
 
     @staticmethod
     def _parse(client: "pyrogram.Client", data: dict) -> "WidgetQueryWallet":
+        if not isinstance(data, dict):
+            return WidgetQueryWallet(
+                client=client, address=data.address, amount=str(data.balance),
+                public_key=data.public_key.hex() if data.public_key is not None else None,
+                state_init=base64.b64encode(data.state_init).decode("ascii")
+                if data.state_init is not None else None
+            )
         return WidgetQueryWallet(
             client=client,
             address=data["address"],
@@ -179,6 +187,21 @@ class WidgetQueryType:
     def _parse(client: "pyrogram.Client", data: Optional[dict]):
         if data is None:
             return None
+        if not isinstance(data, dict):
+            from pyrogram import raw
+            if isinstance(data, raw.types.WidgetQueryTypeData):
+                return WidgetQueryTypeData(client=client)
+            if isinstance(data, raw.types.WidgetQueryTypeSignData):
+                return WidgetQueryTypeSignData(
+                    client=client, wallet=WidgetQueryWallet._parse(client, data.wallet),
+                    sign_data=data.sign_data.data
+                )
+            if isinstance(data, raw.types.WidgetQueryTypeSentTransaction):
+                return WidgetQueryTypeSentTransaction(
+                    client=client, wallet=WidgetQueryWallet._parse(client, data.wallet),
+                    msg_hash=data.msg_hash
+                )
+            return data
         kind = data.get("type")
         if kind == "data":
             return WidgetQueryTypeData._parse(client, data)

@@ -21,6 +21,7 @@ import contextvars
 import inspect
 import logging
 from collections import OrderedDict
+from copy import copy
 from contextlib import asynccontextmanager
 from typing import Dict, Optional, Tuple
 
@@ -138,6 +139,10 @@ class Dispatcher:
     ENQUEUE_TIMEOUT = 5
 
     def __init__(self, client: "pyrogram.Client"):
+        from pyrogram.raw.types import (
+            UpdateBotWidgetQuery, UpdateInlineBotWidgetQuery,
+            UpdateBotWidgetCopyQuery, UpdateMessageWidgetData,
+        )
         self.client = client
 
         self.widget_updates_task = None
@@ -192,6 +197,14 @@ class Dispatcher:
             )
 
         async def widget_query_parser(update, users, chats):
+            if not isinstance(update, dict):
+                if getattr(self.client, "widget_transport", "botapi") != "mtproto":
+                    return None, type(None)
+                if isinstance(update, UpdateBotWidgetCopyQuery):
+                    return (await pyrogram.types.SharedWidgetQuery._parse(self.client, update, users, chats),
+                            SharedWidgetQueryHandler)
+                return (await pyrogram.types.WidgetQuery._parse(self.client, update, users, chats),
+                        WidgetQueryHandler)
             if "widget_query" in update:
                 return (
                     await pyrogram.types.WidgetQuery._parse(self.client, update["widget_query"]),
@@ -209,6 +222,22 @@ class Dispatcher:
                 await pyrogram.types.CallbackQuery._parse(self.client, update, users, chats),
                 CallbackQueryHandler
             )
+
+        async def widget_data_parser(update, users, chats):
+            key = (utils.get_peer_id(update.peer), update.msg_id)
+            cached = self.client.message_cache.get(key)
+            if cached is None or cached.widget is None:
+                return None, type(None)
+            from pyrogram.types.bots_and_keyboards.widget import _parse_json_value
+            message = copy(cached)
+            message.widget = copy(cached.widget)
+            if update.chat_data is not None:
+                message.widget.chat_data = _parse_json_value(update.chat_data, "chat_data")
+            if update.public_data is not None:
+                message.widget.public_data = _parse_json_value(update.public_data, "public_data")
+                message.widget.public_data_hash = update.public_data_hash
+            self.client.message_cache[key] = message
+            return message, EditedMessageHandler
 
         async def message_generation_stopped_parser(update, users, chats):
             stopped = pyrogram.types.MessageGenerationStopped._parse(
@@ -354,6 +383,8 @@ class Dispatcher:
 
         self.update_parsers = {
             (dict,): widget_query_parser,
+            (UpdateBotWidgetQuery, UpdateInlineBotWidgetQuery, UpdateBotWidgetCopyQuery): widget_query_parser,
+            (UpdateMessageWidgetData,): widget_data_parser,
             Dispatcher.NEW_MESSAGE_UPDATES: message_parser,
             Dispatcher.EDIT_MESSAGE_UPDATES: edited_message_parser,
             Dispatcher.DELETE_MESSAGES_UPDATES: deleted_messages_parser,
@@ -447,6 +478,8 @@ class Dispatcher:
             self.starting = False
 
     def _start_widget_updates(self):
+        if getattr(self.client, "widget_transport", "botapi") == "mtproto":
+            return
         if not self.handler_worker_tasks or self.widget_updates_task is not None:
             return
         if not any(isinstance(h, (WidgetQueryHandler, SharedWidgetQueryHandler)) for handlers in self.groups.values() for h in handlers):
@@ -456,7 +489,7 @@ class Dispatcher:
         self.widget_updates_task = self.client.loop.create_task(self._poll_widget_updates())
 
     async def _poll_widget_updates(self):
-        # Widgets are not available over MTProto; poll only their Bot API updates.
+        # The optional HTTPS transport polls only widget Bot API updates.
         from pyrogram.methods.bots._widget import widget_request
 
         while True:

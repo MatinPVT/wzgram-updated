@@ -89,6 +89,7 @@ Content
     ``filters.text``, "text messages"
     ``filters.caption``, "messages with a caption"
     ``filters.media``, "any media message"
+    ``filters.widget``, "HTML widget messages"
     ``filters.media_group``, "messages that are part of an album"
     ``filters.media_spoiler``, "media hidden behind a spoiler"
     ``filters.self_destruction``, "media with a self-destruct timer"

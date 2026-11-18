@@ -245,6 +245,9 @@ class Message(Object, Update):
         checklist (:obj:`~pyrogram.types.Checklist`, *optional*):
             The message is a checklist message.
 
+        widget (:obj:`~pyrogram.types.Widget`, *optional*):
+            The message contains an HTML widget.
+
         show_caption_above_media (``bool``, *optional*):
             If True, caption must be shown above the message media.
 
@@ -760,6 +763,7 @@ class Message(Object, Update):
         media: Optional["enums.MessageMediaType"] = None,
         paid_media: Optional["types.PaidMediaInfo"] = None,
         checklist: Optional["types.Checklist"] = None,
+        widget: Optional["types.Widget"] = None,
         edit_date: Optional[datetime] = None,
         edit_hidden: Optional[bool] = None,
         media_group_id: Optional[int] = None,
@@ -944,6 +948,7 @@ class Message(Object, Update):
         self.media = media
         self.paid_media = paid_media
         self.checklist = checklist
+        self.widget = widget
         self.edit_date = edit_date
         self.edit_hidden = edit_hidden
         self.media_group_id = media_group_id
@@ -1900,11 +1905,18 @@ class Message(Object, Update):
         checklist = None
 
         media = message.media
+        widget = None
         media_type = None
         has_media_spoiler = None
 
         if media:
-            if isinstance(media, raw.types.MessageMediaPhoto):
+            if isinstance(media, raw.types.MessageMediaWidget):
+                try:
+                    widget = types.Widget._parse(client, media)
+                    media_type = enums.MessageMediaType.WIDGET
+                except (ValueError, UnicodeError):
+                    media_type = enums.MessageMediaType.UNSUPPORTED
+            elif isinstance(media, raw.types.MessageMediaPhoto):
                 if media.live_photo:
                     doc = media.video
 
@@ -2049,6 +2061,7 @@ class Message(Object, Update):
             "dice": dice,
             "paid_media": paid_media,
             "checklist": checklist,
+            "widget": widget,
         }
 
     @staticmethod

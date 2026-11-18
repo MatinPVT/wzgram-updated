@@ -19,17 +19,16 @@
 from typing import Any, List, Optional
 
 import pyrogram
-from ..object import Object
+from ..input_content.input_message_content import InputMessageContent
 
 
-class InputWidgetMessageContent(Object):
+class InputWidgetMessageContent(InputMessageContent):
     """Content of a message with an HTML widget, to be sent as the result
     of an inline query (Bot API 10.4).
 
     Currently, widgets can't be sent in response to inline queries in
-    the production environment. Widgets are Bot API only, so this type
-    has no MTProto ``write()``; use :meth:`to_dict` for a Bot API
-    ``answerInlineQuery`` payload.
+    the production environment. Use :meth:`to_dict` for Bot API payloads
+    or ``write()`` through wzgram's native inline result methods.
 
     Parameters:
         html (``str``):
@@ -43,10 +42,12 @@ class InputWidgetMessageContent(Object):
             Height in logical pixels, clamped by the app to 50-600.
 
         public_data (JSON value | ``str``, *optional*):
-            Public data, 0-1,024 bytes of JSON.
+            Public data, 0-1,024 UTF-8 bytes. Strings are sent unchanged;
+            Python JSON values are serialized.
 
         chat_data (JSON value | ``str``, *optional*):
-            Data specific to the message, 0-1,024 bytes of JSON.
+            Data specific to the message, 0-1,024 UTF-8 bytes. Strings are
+            sent unchanged; Python JSON values are serialized.
 
         caption (``str``, *optional*):
             Widget caption, 0-1,024 characters.
@@ -84,7 +85,8 @@ class InputWidgetMessageContent(Object):
         caption_entities: Optional[List[dict]] = None,
         show_caption_above_media: Optional[bool] = None
     ):
-        super().__init__(client)
+        super().__init__()
+        self._client = client
         self.html = html
         self.width = width
         self.height = height
@@ -96,6 +98,18 @@ class InputWidgetMessageContent(Object):
         self.parse_mode = parse_mode
         self.caption_entities = caption_entities
         self.show_caption_above_media = show_caption_above_media
+
+    async def write(self, client: "pyrogram.Client", reply_markup=None):
+        from pyrogram import raw
+        from ...methods.bots._widget_mtproto import caption, markup
+        payload = self.to_dict()
+        return raw.types.InputBotInlineMessageWidget(
+            html=payload["html"], width=payload.get("width") or 0, height=payload.get("height") or 0,
+            public_data=payload.get("public_data"), chat_data=payload.get("chat_data"),
+            allow_queries=payload.get("allow_queries"), shared_widget=payload.get("is_shared"),
+            invert_media=payload.get("show_caption_above_media"),
+            reply_markup=await markup(client, reply_markup), **await caption(client, payload)
+        )
 
     def to_dict(self) -> dict:
         from ...methods.bots._widget import validate_data, validate_html
@@ -124,7 +138,7 @@ class InputWidgetMessageContent(Object):
         return result
 
 
-class InputSharedWidgetMessageContent(Object):
+class InputSharedWidgetMessageContent(InputMessageContent):
     """Content of a message with a shared widget, to be sent as the result
     of an inline query (Bot API 10.4).
 
@@ -137,7 +151,8 @@ class InputSharedWidgetMessageContent(Object):
             Unique identifier of the shared widget created by the bot.
 
         chat_data (JSON value | ``str``, *optional*):
-            Data specific to the message, 0-1,024 bytes of JSON.
+            Data specific to the message, 0-1,024 UTF-8 bytes. Strings are
+            sent unchanged; Python JSON values are serialized.
 
         caption (``str``, *optional*):
             Widget caption, 0-1,024 characters.
@@ -163,13 +178,24 @@ class InputSharedWidgetMessageContent(Object):
         caption_entities: Optional[List[dict]] = None,
         show_caption_above_media: Optional[bool] = None
     ):
-        super().__init__(client)
+        super().__init__()
+        self._client = client
         self.widget_id = widget_id
         self.chat_data = chat_data
         self.caption = caption
         self.parse_mode = parse_mode
         self.caption_entities = caption_entities
         self.show_caption_above_media = show_caption_above_media
+
+    async def write(self, client: "pyrogram.Client", reply_markup=None):
+        from pyrogram import raw
+        from ...methods.bots._widget_mtproto import caption, markup
+        payload = self.to_dict()
+        return raw.types.InputBotInlineMessageWidgetId(
+            widget_id=int(self.widget_id), chat_data=payload.get("chat_data"),
+            invert_media=payload.get("show_caption_above_media"),
+            reply_markup=await markup(client, reply_markup), **await caption(client, payload)
+        )
 
     def to_dict(self) -> dict:
         from ...methods.bots._widget import validate_data

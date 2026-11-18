@@ -198,12 +198,15 @@ def pyrogram_api():
             answer_pre_checkout_query
             answer_shipping_query
             answer_web_app_query
+            answer_widget_query
             can_bot_send_message
             check_bot_username
             create_bot
             create_invoice_link
             delete_bot_commands
             edit_user_star_subscription
+            edit_message_widget_data
+            edit_shared_widget_data
             get_admined_bots
             get_bot_commands
             get_bot_default_privileges
@@ -224,6 +227,8 @@ def pyrogram_api():
             send_game
             send_inline_bot_result
             send_invoice
+            send_widget
+            send_shared_widget
             set_bot_commands
             set_bot_default_privileges
             set_bot_info_description
@@ -697,11 +702,13 @@ def pyrogram_api():
             on_purchased_paid_media
             on_raw_update
             on_shipping_query
+            on_shared_widget_query
             on_start
             on_stop
             on_story
             on_ton_wallet_state
             on_user_status
+            on_widget_query
         """,
     )
 
@@ -1041,6 +1048,14 @@ def pyrogram_api():
             LoginUrl
             ForceReply
             CallbackQuery
+            Widget
+            WidgetQuery
+            SharedWidgetQuery
+            WidgetQueryType
+            WidgetQueryTypeData
+            WidgetQueryTypeSignData
+            WidgetQueryTypeSentTransaction
+            WidgetQueryWallet
             GameHighScore
             CallbackGame
             WebAppInfo
@@ -1147,6 +1162,8 @@ def pyrogram_api():
             InputRichMessage
             InputRichMessageContent
             InputTextMessageContent
+            InputWidgetMessageContent
+            InputSharedWidgetMessageContent
             InputContactMessageContent
             InputLocationMessageContent
             InputVenueMessageContent
@@ -1436,6 +1453,11 @@ def pyrogram_api():
         inline_query="""
         InlineQuery
             InlineQuery.answer
+        """,
+        widget_query="""
+        Widget Queries
+            WidgetQuery.answer
+            SharedWidgetQuery.answer
         """,
         chat_join_request="""
         ChatJoinRequest

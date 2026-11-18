@@ -81,6 +81,10 @@ Telegram Features
       - 10.2
       - July 2026
       - Groups of chats presented as one entity
+    * - :doc:`widgets`
+      - 10.4
+      - November 2026
+      - Interactive HTML widgets with bot-owned state
 
 .. toctree::
     :hidden:
@@ -99,6 +103,7 @@ Telegram Features
     rich-messages
     ephemeral-messages
     communities
+    widgets
 
 wzgram Extensions
 -----------------

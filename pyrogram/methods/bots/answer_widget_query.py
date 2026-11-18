@@ -44,9 +44,9 @@ class AnswerWidgetQuery:
                 Unique identifier for the answered query.
 
             data (JSON value | ``str``, *optional*):
-                Response data, at most 1,024 UTF-8 bytes of JSON.
-                A JSON-encoded string or an empty string is also accepted.
-                Omit to acknowledge without data. Explicit None sends JSON null.
+                Response data, at most 1,024 UTF-8 bytes. Strings are sent
+                unchanged; Python JSON values are serialized. Omit to acknowledge
+                without data. Explicit None sends the string "null".
 
         Returns:
             ``bool``: On success, True is returned.

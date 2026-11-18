@@ -39,24 +39,24 @@ def validate_html(html: str) -> str:
     return html
 
 
-def validate_data(data, name="chat_data"):
+def validate_data(data, name="chat_data") -> str:
+    """Return Bot API text unchanged, or serialize a Python JSON value once."""
     try:
-        if isinstance(data, str) and data != "":
-            data = json.loads(data)
-        encoded = json.dumps(data, ensure_ascii=False, allow_nan=False,
-                             separators=(",", ":")).encode("utf-8")
-    except (TypeError, ValueError, UnicodeError) as exc:
-        raise ValueError(f"{name} must be valid JSON") from exc
+        text = data if isinstance(data, str) else json.dumps(
+            data, ensure_ascii=False, allow_nan=False, separators=(",", ":")
+        )
+        encoded = text.encode("utf-8")
+    except (TypeError, ValueError, UnicodeError, RecursionError) as exc:
+        raise ValueError(f"{name} must be UTF-8 text or a valid JSON value") from exc
     if len(encoded) > 1024:
-        raise ValueError(f"{name} exceeds 1,024 UTF-8 bytes of JSON")
-    return data
+        raise ValueError(f"{name} exceeds 1,024 UTF-8 bytes")
+    return text
 
 
-def _request(token, method, payload):
-    # wzgram is MTProto-only and its TL schema has no widget constructors.
-    # Widgets therefore use Bot API HTTPS with the client's bot token and urllib.
+def _request(token, method, payload, test_mode=False):
+    # Optional Bot API bridge; native layer 233 calls use _widget_mtproto.
     req = request.Request(
-        f"https://api.telegram.org/bot{token}/{method}",
+        f"https://api.telegram.org/bot{token}/{'test/' if test_mode else ''}{method}",
         data=json.dumps(payload, ensure_ascii=False, allow_nan=False,
                         separators=(",", ":")).encode("utf-8"),
         headers={"Content-Type": "application/json"},
@@ -79,11 +79,16 @@ def _request(token, method, payload):
 
 
 async def widget_request(client: "pyrogram.Client", method: str, payload: dict):
+    if getattr(client, "widget_transport", "botapi") == "mtproto":
+        from ._widget_mtproto import widget_request as native_request
+        return await native_request(client, method, payload)
     token = client.bot_token
     if not token:
         raise ValueError("Widget methods require the client's bot_token")
     # Run blocking standard-library HTTPS outside the asyncio event loop.
-    return await asyncio.to_thread(_request, token, method, payload)
+    return await asyncio.to_thread(
+        _request, token, method, payload, getattr(client, "test_mode", False)
+    )
 
 
 def parse_user(client, data):
@@ -109,7 +114,7 @@ def parse_chat(client, data):
 
 
 def parse_message(client, data):
-    if isinstance(data, bool):
+    if isinstance(data, (bool, types.Message)):
         return data
     message = types.Message(
         client=client, id=data["message_id"], chat=parse_chat(client, data["chat"]),
@@ -117,9 +122,7 @@ def parse_message(client, data):
         date=datetime.fromtimestamp(data["date"], timezone.utc).replace(tzinfo=None)
         if data.get("date") is not None else None
     )
-    # Bot API 10.4: messages with HTML widgets carry a Widget object.
-    # Message itself is an MTProto type with no widget field, so attach it
-    # here for Bot API messages only.
+    # Parse the bridge's Bot API representation of widget media.
     if data.get("widget") is not None:
         from pyrogram.types.bots_and_keyboards.widget import Widget
         message.widget = Widget._parse(client, data["widget"])

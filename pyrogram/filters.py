@@ -472,6 +472,14 @@ async def poll_filter(_, __, m: Message):
 poll = create(poll_filter)
 
 
+async def widget_filter(_, __, m: Message):
+    return bool(m.widget)
+
+
+widget = create(widget_filter)
+"""Filter messages containing HTML widgets."""
+
+
 # endregion
 
 # region dice_filter

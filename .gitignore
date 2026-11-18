@@ -136,3 +136,5 @@ venv.bak/
 # ai
 CLAUDE.md
 .claude
+.firecrawl/
+.pytest_cache/

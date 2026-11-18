@@ -21,6 +21,7 @@ from typing import Any, Optional, Union
 import pyrogram
 from pyrogram import types
 
+from ...types.bots_and_keyboards.widget_query import _UNSET
 from ._widget import parse_message, validate_data, widget_request
 
 
@@ -29,9 +30,9 @@ class EditMessageWidgetData:
         self: "pyrogram.Client",
         chat_id: Optional[Union[int, str]] = None,
         message_id: Optional[int] = None,
-        chat_data: Any = None,
+        chat_data: Any = _UNSET,
         inline_message_id: Optional[str] = None,
-        public_data: Any = None
+        public_data: Any = _UNSET
     ) -> Union["types.Message", bool]:
         """Edit the JSON state of a widget message.
 
@@ -48,16 +49,16 @@ class EditMessageWidgetData:
                 Identifier of the widget message in the target chat.
 
             chat_data (JSON value | ``str``, *optional*):
-                New state, at most 1,024 UTF-8 bytes of JSON. Defaults to an empty
-                object. A JSON-encoded string is also accepted. Pass an empty
-                string to remove the data; omit to leave it unchanged when
-                only ``public_data`` is changed.
+                New state, at most 1,024 UTF-8 bytes. Strings are sent unchanged;
+                Python JSON values are serialized. Pass an empty string to remove
+                the data; omit to leave it unchanged. Explicit None sends "null".
 
             inline_message_id (``str``, *optional*):
                 Inline message identifier, used instead of chat_id and message_id.
 
             public_data (JSON value | ``str``, *optional*):
-                New public data, at most 1,024 bytes of JSON. Pass an empty
+                New public data, at most 1,024 UTF-8 bytes. Strings are sent
+                unchanged; Python JSON values are serialized. Pass an empty
                 string to remove it; omit to leave it unchanged.
 
         Returns:
@@ -67,14 +68,11 @@ class EditMessageWidgetData:
         Raises:
             ValueError: If the target or state is invalid or the bot token is missing.
         """
-        if chat_data is None and public_data is None:
-            payload = {"chat_data": {}}
-        else:
-            payload = {}
-            if chat_data is not None:
-                payload["chat_data"] = "" if chat_data == "" else validate_data(chat_data)
-            if public_data is not None:
-                payload["public_data"] = "" if public_data == "" else validate_data(public_data, "public_data")
+        payload = {}
+        if chat_data is not _UNSET:
+            payload["chat_data"] = validate_data(chat_data)
+        if public_data is not _UNSET:
+            payload["public_data"] = validate_data(public_data, "public_data")
         if inline_message_id is not None:
             if not inline_message_id or chat_id is not None or message_id is not None:
                 raise ValueError("Use inline_message_id OR chat_id and message_id")

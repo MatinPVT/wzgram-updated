@@ -24,6 +24,7 @@ from ..object import Object
 from ..update import Update
 from .widget_query_type import WidgetQueryType
 from .widget_query import _UNSET
+from .widget import _parse_json_value
 
 
 class SharedWidgetQuery(Object, Update):
@@ -86,7 +87,17 @@ class SharedWidgetQuery(Object, Update):
 
     @staticmethod
     async def _parse(client: "pyrogram.Client", shared_widget_query: dict, users=None, chats=None) -> "SharedWidgetQuery":
-        from ...methods.bots._widget import parse_user, validate_data
+        if not isinstance(shared_widget_query, dict):
+            query_type = WidgetQueryType._parse(client, shared_widget_query.query_type)
+            if hasattr(query_type, "wallet_card"):
+                query_type.wallet_card = shared_widget_query.wallet_card
+            return SharedWidgetQuery(
+                client=client, id=str(shared_widget_query.query_id),
+                from_user=types.User._parse(client, (users or {}).get(shared_widget_query.user_id)),
+                type=query_type, data=shared_widget_query.data.decode("utf-8"),
+                widget_id=str(shared_widget_query.widget_id)
+            )
+        from ...methods.bots._widget import parse_user
 
         return SharedWidgetQuery(
             client=client, id=str(shared_widget_query["id"]),
@@ -94,8 +105,8 @@ class SharedWidgetQuery(Object, Update):
             type=WidgetQueryType._parse(client, shared_widget_query.get("type")),
             data=shared_widget_query["data"],
             widget_id=shared_widget_query["widget_id"],
-            chat_data=validate_data(shared_widget_query.get("chat_data", {})),
-            public_data=validate_data(shared_widget_query.get("public_data", {}), "public_data")
+            chat_data=_parse_json_value(shared_widget_query.get("chat_data", {}), "chat_data"),
+            public_data=_parse_json_value(shared_widget_query.get("public_data", {}), "public_data")
         )
 
     async def answer(self, data: Any = _UNSET) -> bool:

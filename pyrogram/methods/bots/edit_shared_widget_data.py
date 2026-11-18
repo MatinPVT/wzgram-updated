@@ -41,9 +41,9 @@ class EditSharedWidgetData:
                 Unique identifier of the shared widget.
 
             public_data (JSON value | ``str``):
-                New public data, 0-1,024 bytes of JSON; pass an empty
-                string to remove the public data. A JSON-encoded string
-                is also accepted.
+                New public data, 0-1,024 UTF-8 bytes; pass an empty
+                string to remove it. Strings are sent unchanged and
+                Python JSON values are serialized.
 
             cache_time (``int``, *optional*):
                 Maximum time in seconds that the public data may be
@@ -57,11 +57,14 @@ class EditSharedWidgetData:
             ValueError: If public data is invalid, cache_time is out of
                 range, or the bot token is missing.
         """
-        if cache_time is not None and not 5 <= cache_time <= 3600:
+        if cache_time is not None and (
+            isinstance(cache_time, bool) or not isinstance(cache_time, int)
+            or not 5 <= cache_time <= 3600
+        ):
             raise ValueError("cache_time must be between 5 and 3600 seconds")
         payload = {
             "widget_id": widget_id,
-            "public_data": "" if public_data == "" else validate_data(public_data, "public_data")
+            "public_data": validate_data(public_data, "public_data")
         }
         if cache_time is not None:
             payload["cache_time"] = cache_time

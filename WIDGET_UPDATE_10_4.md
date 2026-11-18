@@ -1,89 +1,107 @@
-# Widgets update — Bot API 10.4 (9 Nov 2026)
+# Telegram Widgets - Bot API 10.4 compatibility
 
-Base: wzgram 3.1.7 (Pyrogram fork). Widget support was added locally on top
-of it; this update completes the official Bot API 10.4 widget surface.
-Tests: `python3 -B tests/test_widget.py` — 47/47 pass (original 30 retained).
+Checked against Telegram's current official documentation for Bot API 10.4
+(November 9, 2026) and the TelegramWidget JavaScript runtime:
 
-## Follow-up audit fixes
-- Added the missing Bot API send options to both widget send methods:
-  topic targeting, caption formatting and placement, notification/content
-  protection/broadcast options, message effects, replies and reply markup.
-  Caption entities and reply objects use Bot API dictionaries.
-- Added caption formatting and placement to both inline widget content types.
-- `answer_widget_query` and both bound `answer()` methods now allow omitted
-  data; explicit `None` still sends JSON null. Empty data is accepted across
-  widget methods. Answers reach only the requesting widget and do not edit
-  state; the answer must be sent within 15 seconds.
-- Enforced the official minimum of one byte of HTML. `WidgetQuery` can also
-  be constructed without the local-only state fields.
-- Confirmed all widget/query/wallet fields, handlers and exports. Added
-  dispatcher tests for both query routes, polling offsets, queue retries
-  and startup. No dispatcher changes were needed. Existing default payloads
-  of `send_widget` and `edit_message_widget_data` are unchanged.
+- https://core.telegram.org/bots/api#widget
+- https://core.telegram.org/bots/widgets
+- https://github.com/telegramdesktop/tdesktop/blob/dev/Telegram/SourceFiles/mtproto/scheme/api.tl
 
-## Added in this update
-- `send_shared_widget(chat_id, widget_id, chat_data=None, caption=None)` —
-  send again a shared widget created by the bot (`sendSharedWidget`).
-- `edit_shared_widget_data(widget_id, public_data, cache_time=None)` —
-  change public data of a shared widget, at most once per second
-  (`editSharedWidgetData`). `cache_time` is 5–3600, default 30.
-- `SharedWidgetQuery` type + `shared_widget_query` update polling +
-  `SharedWidgetQueryHandler` + `@client.on_shared_widget_query()`.
-- `Widget` type (`id`, `width`, `height`, `html`, `public_data`,
-  `chat_data`); Bot API widget messages returned by `send_widget` /
-  `send_shared_widget` now carry a `.widget` attribute.
-- `WidgetQueryType` family: `WidgetQueryTypeData` (with optional
-  `wallet_card`, kept raw — this library has no `TonWalletCard` type yet),
-  `WidgetQueryTypeSignData`, `WidgetQueryTypeSentTransaction`, and
-  `WidgetQueryWallet`. `WidgetQuery` now also parses the official fields
-  `chat_instance`, `chat_type`, `type` and `widget_id`.
-- `InputWidgetMessageContent` / `InputSharedWidgetMessageContent` with
-  `to_dict()` for Bot API inline-query results. Note: widgets can't be
-  sent in response to inline queries in the production environment.
-- `send_widget` extras (all optional, old calls unchanged): `public_data`,
-  `width`, `height`, `caption`, `is_shared=True` to create a shared widget.
-- `edit_message_widget_data` now also accepts `public_data` (and `""` to
-  remove data, per the official API).
+## Supported widget surface
 
-## Already present before this update
-`send_widget`, `answer_widget_query`, `edit_message_widget_data`,
-`WidgetQuery` + `on_widget_query`, dispatcher widget polling, size
-validation (HTML 32,768 raw / 4,096 zlib-9, state 1,024 bytes JSON).
+- `send_widget`, `send_shared_widget`, `answer_widget_query`,
+  `edit_message_widget_data`, `edit_shared_widget_data`.
+- `Widget`, `WidgetQuery`, `SharedWidgetQuery`, data/sign-data/transaction
+  query variants and `WidgetQueryWallet`.
+- `on_widget_query` and `on_shared_widget_query`, with widget-only Bot API
+  polling alongside the existing MTProto dispatcher.
+- `InputWidgetMessageContent` and `InputSharedWidgetMessageContent` with
+  `to_dict()` for Bot API inline results.
+- Widget send options for topics, captions, caption entities and placement,
+  notification/content protection/broadcast options, message effects,
+  replies and reply markup. Caption entities and reply objects use Bot API
+  dictionaries.
 
-## Example — shared widget
-```python
-sent = await app.send_widget(chat.id, html, {"count": 0},
-                             allow_queries=True, is_shared=True)
-widget_id = sent.widget.id  # from the Widget on the returned Message
+## Native MTProto support
 
-await app.send_shared_widget(chat.id, widget_id, {"count": 0})
-await app.edit_shared_widget_data(widget_id, {"theme": "blue"}, cache_time=60)
+The repository already pins layer 233, whose raw schema includes widgets.
+Set `widget_transport="mtproto"` when constructing `Client` to use native
+widget sends, shared sends, answers and chat/inline/shared edits. Native bot
+sessions do not need the bot token again after authorization. The default
+`widget_transport="botapi"` preserves the previous HTTPS bridge.
 
-@app.on_shared_widget_query()
-async def on_shared(client, query):
-    await query.answer({"ok": True})
-```
+Native widget queries from chat messages, inline messages and forwarded shared
+widgets reach the existing widget handlers without an extra Bot API poller.
+Only the selected transport delivers high-level queries, preventing duplicates.
+Widget messages and external replies expose `.widget`; widget media has
+`MessageMediaType.WIDGET` and a `filters.widget` filter. Layer 233 widget state
+updates refresh cached messages and reach edited-message handlers. Compressed
+HTML is decoded with zlib; invalid payloads use unsupported-media fallback.
+Both inline content types now implement native `write()` in addition to
+Bot API `to_dict()`, and work in `InlineQueryResultArticle`.
 
-## Deliberately left out / known deviations
-- `Widget` on `Message` / `ExternalReplyInfo` for MTProto messages: widgets
-  are Bot API only, so the `widget` field is attached only to messages
-  returned by the widget methods in `pyrogram/methods/bots/_widget.py`.
-  It is not added to the 10,000-line MTProto `Message._parse`.
-- `copyMessage` / `copyMessages` cannot copy widget messages (official
-  rule). No guard was added in the library; the Bot API returns the error.
-- Other Bot API 10.4 sections (Ephemeral messages, TON wallet cards,
-  Chat share themes, Gifts `getUniqueGift` / `deleteBusinessAccountGift`)
-  are not part of this widget update. Some of those types already exist
-  in this codebase (for example ephemeral-message support in `Message`);
-  the rest would need a layer/schema upgrade and are out of scope here.
-- Local convention, kept for backward compatibility: `chat_data` /
-  `public_data` / `data` are passed as JSON values and validated to
-  1,024 bytes. The official Bot API documents them as JSON *strings*.
-  The existing widget bots in `../widget-bot` rely on the JSON-value
-  convention (and on `chat_data` / `public_data` arriving on the query),
-  so it was not changed. Verify the new shared-widget methods against
-  the live Bot API before relying on them in production.
-- Codex was asked to do this update first and crashed twice (exit 101,
-  Rust panic "failed printing to stderr: Resource temporarily
-  unavailable") with no files changed. This update was implemented
-  directly instead, following the existing widget code patterns.
+## Compatibility fixes
+
+The official data fields are **text strings**, not JSON objects. Strings are
+now sent unchanged, including arbitrary text, pre-encoded JSON and empty text.
+Python dictionaries, lists and other JSON values remain accepted and are
+serialized once to compact JSON strings before sending. Size checks measure
+the actual field's UTF-8 bytes, without counting the outer request's JSON
+escaping. Each data field allows 0-1,024 bytes. HTML allows 1-32,768 bytes
+and at most 4,096 bytes after zlib level 9 compression.
+
+For `edit_message_widget_data`, omitted fields now stay unchanged instead of
+resetting chat state to an empty object. Pass `""` to clear data; explicit
+`None` serializes to the string `"null"`. To reset to an empty object, pass
+`{}` explicitly. Sending without `chat_data` retains the existing default
+empty object, now sent as `"{}"`.
+
+`answer_widget_query` and both query-bound `answer()` methods allow omitted
+data. An explicit Python `None` sends the string `"null"`. Answers reach only
+the requesting widget and do not edit its persistent state; answer within
+15 seconds and use the separate edit methods to persist changes.
+
+Bot API widget requests honor the client's `test_mode`: test requests use
+`https://api.telegram.org/bot<token>/test/<method>`. The widget poller uses
+the same environment. Use a bot token created in the selected environment.
+
+`Widget` response data continues to decode JSON text when possible and keeps
+other text unchanged. The legacy `chat_data` and `public_data` query extensions
+behave the same way; official queries do not include these state fields.
+Keep authoritative state in bot storage.
+
+The tap-counter example parses JavaScript `chatData` and request `result` as
+JSON text, handles `chatDataChanged`, ignores stale revisions, shows request
+errors and persists successful taps with `edit_message_widget_data`. Its
+in-memory bot storage is for demonstration; deployed bots need durable storage.
+
+Widget methods, decorators and types are registered with the docs compiler;
+see [the widget guide](docs/source/features/widgets.rst) and
+[example](examples/widget_bot.py).
+
+## Telegram restrictions and scope
+
+- In production, widgets currently work only in private chats with the bot
+  and automatically have protected content. Groups and inline widgets work
+  on Telegram's test server. Widget messages cannot be copied with
+  `copyMessage`/`copyMessages`.
+- In HTTPS mode, use one Bot API poller and no webhook. Widget handlers poll
+  `widget_query` and `shared_widget_query` only.
+- Shared public data can be edited at most once per second. `cache_time` is
+  an integer from 5 to 3,600 seconds; omitted values keep the current setting
+  (30 by default). Shared widgets must call `watchPublicData()` to receive
+  live public-data changes while open.
+- `wallet_card` is preserved as a Bot API dictionary or native wallet card. Other Bot API 10.4
+  features and the repository's separately pinned MTProto/Bot API schema are
+  outside this widget compatibility change.
+
+## Validation
+
+`tests/test_widget_mtproto.py` checks native sends, edits, answers, inline
+content, compressed media, queries, cache state updates and external replies.
+`tests/test_widget.py` checks HTTPS wire payloads, raw text and JSON conversion,
+UTF-8 size boundaries, data removal/omission/null, query parsing, test-mode
+routing, handlers and polling. `tests/test_widget_example.py` executes the
+example's JavaScript against the runtime's text-state and event contract.
+These checks use mocked HTTPS and a local JavaScript runtime; they do not
+send messages to a live Telegram bot.

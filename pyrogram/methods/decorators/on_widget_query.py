@@ -33,8 +33,9 @@ class OnWidgetQuery:
         .. include:: /_includes/usable-by/bots.rst
 
 
-        Registering this handler enables Bot API polling for widget queries.
-        Supply bot_token and do not run another Bot API poller or webhook for the bot.
+        With widget_transport="mtproto", queries arrive through the normal dispatcher.
+        The default "botapi" transport enables widget-only HTTPS polling; supply
+        bot_token and do not run another Bot API poller or webhook for the bot.
 
         This does the same thing as :meth:`~pyrogram.Client.add_handler` using the
         :obj:`~pyrogram.handlers.WidgetQueryHandler`.

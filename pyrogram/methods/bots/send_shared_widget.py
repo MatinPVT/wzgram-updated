@@ -59,9 +59,9 @@ class SendSharedWidget:
                 field of a :obj:`~pyrogram.types.Widget`.
 
             chat_data (JSON value | ``str``, *optional*):
-                Data specific to this message, at most 1,024 bytes of
-                JSON. A JSON-encoded string is also accepted. Defaults
-                to an empty object.
+                Data specific to this message, at most 1,024 UTF-8 bytes.
+                Strings are sent unchanged; Python JSON values are serialized.
+                Defaults to "{}".
 
             caption (``str``, *optional*):
                 Widget caption, 0-1,024 characters.

@@ -48,6 +48,8 @@ def _source_only_imports():
     load('pyrogram.types.object', 'pyrogram/types/object.py')
     pg.types.Update = load('pyrogram.types.update', 'pyrogram/types/update.py').Update
     package('pyrogram.types.bots_and_keyboards', 'pyrogram/types/bots_and_keyboards')
+    package('pyrogram.types.input_content', 'pyrogram/types/input_content')
+    load('pyrogram.types.input_content.input_message_content', 'pyrogram/types/input_content/input_message_content.py')
     package('pyrogram.methods', 'pyrogram/methods')
     package('pyrogram.methods.bots', 'pyrogram/methods/bots')
     package('pyrogram.methods.decorators', 'pyrogram/methods/decorators')
@@ -103,7 +105,7 @@ def _source_only_imports():
     })
     pg.raw = package('pyrogram.raw', 'pyrogram/raw')
     pg.raw.types = package('pyrogram.raw.types', 'pyrogram/raw/types')
-    for node in ast.parse((ROOT / 'pyrogram/dispatcher.py').read_text()).body:
+    for node in ast.walk(ast.parse((ROOT / 'pyrogram/dispatcher.py').read_text())):
         if isinstance(node, ast.ImportFrom) and node.module == 'pyrogram.raw.types':
             for alias in node.names:
                 setattr(pg.raw.types, alias.name, type(alias.name, (), {}))
@@ -147,7 +149,7 @@ class WidgetTests(unittest.IsolatedAsyncioTestCase):
     async def test_send_payload_and_message(self):
         message = await self.client.send_widget(42, '<html>tap</html>', {'count': 0}, True)
         self.assertEqual(self.payload('sendWidget'), {
-            'chat_id': 42, 'html': '<html>tap</html>', 'chat_data': {'count': 0}, 'allow_queries': True})
+            'chat_id': 42, 'html': '<html>tap</html>', 'chat_data': '{"count":0}', 'allow_queries': True})
         self.assertIsInstance(message, types.Message)
         self.assertEqual((message.id, message.chat.id, message.from_user.id), (7, 42, 123))
         self.assertIs(message._client, self.client)
@@ -156,16 +158,16 @@ class WidgetTests(unittest.IsolatedAsyncioTestCase):
         self.respond(True)
         self.assertTrue(await self.client.answer_widget_query('query-1', {'count': 1, 'revision': 1}))
         self.assertEqual(self.payload('answerWidgetQuery'), {
-            'widget_query_id': 'query-1', 'data': {'count': 1, 'revision': 1}})
+            'widget_query_id': 'query-1', 'data': '{"count":1,"revision":1}'})
 
-    async def test_default_payloads_unchanged(self):
+    async def test_default_send_state_and_omitted_edit_state(self):
         await self.client.send_widget(42, 'html')
         self.assertEqual(self.payload('sendWidget'), {
-            'chat_id': 42, 'html': 'html', 'chat_data': {}, 'allow_queries': False})
+            'chat_id': 42, 'html': 'html', 'chat_data': '{}', 'allow_queries': False})
         self.respond(True)
         self.assertTrue(await self.client.edit_message_widget_data(42, 7))
         self.assertEqual(self.payload('editMessageWidgetData'), {
-            'chat_id': 42, 'message_id': 7, 'chat_data': {}})
+            'chat_id': 42, 'message_id': 7})
 
     async def test_send_message_options(self):
         options = {
@@ -182,18 +184,19 @@ class WidgetTests(unittest.IsolatedAsyncioTestCase):
                 call = self.client.send_widget if method == 'sendWidget' else self.client.send_shared_widget
                 await call(*args, **options)
                 self.assertEqual(self.payload(method), {
-                    'chat_id': 42, 'chat_data': {}, **required, **options})
+                    'chat_id': 42, 'chat_data': '{}', **required, **options})
 
     async def test_answer_optional_empty_and_null_data(self):
         self.respond(True)
         self.assertTrue(await self.client.answer_widget_query('q'))
         self.assertEqual(self.payload('answerWidgetQuery'), {'widget_query_id': 'q'})
-        for data in ('', None, False, 0, [], {'ok': True}):
+        for data, expected in (('', ''), (None, 'null'), (False, 'false'),
+                               (0, '0'), ([], '[]'), ({'ok': True}, '{"ok":true}')):
             with self.subTest(data=data):
                 self.respond(True)
                 self.assertTrue(await self.client.answer_widget_query('q', data))
                 self.assertEqual(self.payload('answerWidgetQuery'), {
-                    'widget_query_id': 'q', 'data': data})
+                    'widget_query_id': 'q', 'data': expected})
 
     async def test_bound_answers_without_data(self):
         for query_type, extra in ((types.WidgetQuery, {}),
@@ -375,14 +378,14 @@ class WidgetTests(unittest.IsolatedAsyncioTestCase):
         result = await self.client.edit_message_widget_data(42, 7, {'count': 2})
         self.assertIsInstance(result, types.Message)
         self.assertEqual(self.payload('editMessageWidgetData'), {
-            'chat_id': 42, 'message_id': 7, 'chat_data': {'count': 2}})
+            'chat_id': 42, 'message_id': 7, 'chat_data': '{"count":2}'})
 
     async def test_edit_inline_payload(self):
         self.respond(True)
         self.assertTrue(await self.client.edit_message_widget_data(
             inline_message_id='inline-1', chat_data={'count': 2}))
         self.assertEqual(self.payload('editMessageWidgetData'), {
-            'inline_message_id': 'inline-1', 'chat_data': {'count': 2}})
+            'inline_message_id': 'inline-1', 'chat_data': '{"count":2}'})
 
     async def test_html_raw_overflow(self):
         with self.assertRaises(ValueError):
@@ -405,7 +408,7 @@ class WidgetTests(unittest.IsolatedAsyncioTestCase):
     async def test_size_boundaries_accepted(self):
         await self.client.send_widget(42, 'x' * 32768, {'v': 'x' * 1016})
         payload = self.payload('sendWidget')
-        self.assertEqual(len(json.dumps(payload['chat_data'], separators=(',', ':')).encode()), 1024)
+        self.assertEqual(len(payload['chat_data'].encode()), 1024)
 
     async def test_state_overflow_all_methods(self):
         state = {'v': 'x' * 1017}
@@ -423,7 +426,7 @@ class WidgetTests(unittest.IsolatedAsyncioTestCase):
         self.http.assert_not_called()
 
     async def test_invalid_json(self):
-        for data in ('not JSON', {'v': float('nan')}, {'v': {1, 2}}):
+        for data in ({'v': float('nan')}, {'v': {1, 2}}, '\ud800'):
             with self.subTest(data=data):
                 with self.assertRaises(ValueError):
                     await self.client.answer_widget_query('q', data)
@@ -432,7 +435,7 @@ class WidgetTests(unittest.IsolatedAsyncioTestCase):
     async def test_encoded_json(self):
         self.respond(True)
         await self.client.answer_widget_query('q', '{"count":1}')
-        self.assertEqual(self.payload('answerWidgetQuery')['data'], {'count': 1})
+        self.assertEqual(self.payload('answerWidgetQuery')['data'], '{"count":1}')
 
     async def test_invalid_edit_target(self):
         for target in ({}, {'chat_id': 42}, {'message_id': 7}, {'inline_message_id': ''},
@@ -447,6 +450,13 @@ class WidgetTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await self.client.send_widget(42, 'html')
         self.http.assert_not_called()
+
+    async def test_widget_requests_honor_client_test_mode(self):
+        self.client.test_mode = True
+        await self.client.send_widget(42, 'html', {'count': 0})
+        req = self.http.call_args.args[0]
+        self.assertEqual(req.full_url, 'https://api.telegram.org/bot123:TEST/test/sendWidget')
+        self.assertEqual(json.loads(req.data)['chat_data'], '{"count":0}')
 
     async def test_bot_api_error(self):
         self.http.return_value = io.BytesIO(b'{"ok":false,"error_code":400,"description":"Bad widget"}')
@@ -496,19 +506,19 @@ class WidgetTests(unittest.IsolatedAsyncioTestCase):
     async def test_send_shared_widget_payload(self):
         message = await self.client.send_shared_widget(42, 'widget-9', {'count': 0}, 'Shared!')
         self.assertEqual(self.payload('sendSharedWidget'), {
-            'chat_id': 42, 'widget_id': 'widget-9', 'chat_data': {'count': 0}, 'caption': 'Shared!'})
+            'chat_id': 42, 'widget_id': 'widget-9', 'chat_data': '{"count":0}', 'caption': 'Shared!'})
         self.assertIsInstance(message, types.Message)
 
     async def test_edit_shared_widget_data_payload(self):
         self.respond(True)
         self.assertTrue(await self.client.edit_shared_widget_data('widget-9', {'theme': 'blue'}, 60))
         self.assertEqual(self.payload('editSharedWidgetData'), {
-            'widget_id': 'widget-9', 'public_data': {'theme': 'blue'}, 'cache_time': 60})
+            'widget_id': 'widget-9', 'public_data': '{"theme":"blue"}', 'cache_time': 60})
 
     async def test_edit_shared_widget_data_validation(self):
         with self.assertRaises(ValueError):
             await self.client.edit_shared_widget_data('widget-9', {'v': 'x' * 1017})
-        for cache_time in (4, 3601):
+        for cache_time in (4, 3601, True, 5.5, '30'):
             with self.assertRaises(ValueError):
                 await self.client.edit_shared_widget_data('widget-9', {}, cache_time)
         self.http.assert_not_called()
@@ -518,8 +528,8 @@ class WidgetTests(unittest.IsolatedAsyncioTestCase):
                                       public_data={'theme': 'blue'}, width=300, height=200,
                                       caption='Hi', is_shared=True)
         self.assertEqual(self.payload('sendWidget'), {
-            'chat_id': 42, 'html': '<html>x</html>', 'chat_data': {'count': 0},
-            'allow_queries': True, 'public_data': {'theme': 'blue'},
+            'chat_id': 42, 'html': '<html>x</html>', 'chat_data': '{"count":0}',
+            'allow_queries': True, 'public_data': '{"theme":"blue"}',
             'width': 300, 'height': 200, 'caption': 'Hi', 'is_shared': True})
 
     async def test_edit_message_widget_public_data(self):
@@ -527,7 +537,7 @@ class WidgetTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await self.client.edit_message_widget_data(
             42, 7, public_data={'theme': 'blue'}))
         self.assertEqual(self.payload('editMessageWidgetData'), {
-            'chat_id': 42, 'message_id': 7, 'public_data': {'theme': 'blue'}})
+            'chat_id': 42, 'message_id': 7, 'public_data': '{"theme":"blue"}'})
 
     async def test_parse_official_widget_query(self):
         query = await types.WidgetQuery._parse(self.client, {
@@ -579,7 +589,68 @@ class WidgetTests(unittest.IsolatedAsyncioTestCase):
         content = types.InputWidgetMessageContent(html='<html>x</html>', is_shared=True)
         self.assertEqual(content.to_dict(), {'html': '<html>x</html>', 'is_shared': True})
         shared = types.InputSharedWidgetMessageContent(widget_id='widget-9', chat_data={'count': 1})
-        self.assertEqual(shared.to_dict(), {'widget_id': 'widget-9', 'chat_data': {'count': 1}})
+        self.assertEqual(shared.to_dict(), {'widget_id': 'widget-9', 'chat_data': '{"count":1}'})
+
+    async def test_raw_text_is_preserved_across_widget_methods(self):
+        for text in ('plain text', ' { "count": 1 } ', '"quoted"', 'null', '0', '\u00e9' * 512):
+            with self.subTest(text=text[:32]):
+                self.respond(self.message)
+                await self.client.send_widget(42, 'html', text, public_data=text)
+                payload = self.payload('sendWidget')
+                self.assertEqual((payload['chat_data'], payload['public_data']), (text, text))
+                self.respond(self.message)
+                await self.client.send_shared_widget(42, 'w', text)
+                self.assertEqual(self.payload('sendSharedWidget')['chat_data'], text)
+                self.respond(True)
+                await self.client.answer_widget_query('q', text)
+                self.assertEqual(self.payload('answerWidgetQuery')['data'], text)
+                self.respond(True)
+                await self.client.edit_message_widget_data(42, 7, text, public_data=text)
+                payload = self.payload('editMessageWidgetData')
+                self.assertEqual((payload['chat_data'], payload['public_data']), (text, text))
+                self.respond(True)
+                await self.client.edit_shared_widget_data('w', text)
+                self.assertEqual(self.payload('editSharedWidgetData')['public_data'], text)
+                content = types.InputWidgetMessageContent(html='html', chat_data=text, public_data=text)
+                self.assertEqual(content.to_dict()['chat_data'], text)
+                self.assertEqual(content.to_dict()['public_data'], text)
+                shared = types.InputSharedWidgetMessageContent(widget_id='w', chat_data=text)
+                self.assertEqual(shared.to_dict()['chat_data'], text)
+
+    async def test_raw_text_utf8_limit_all_methods(self):
+        text = '\u00e9' * 512 + 'x'
+        for call in (lambda: self.client.send_widget(42, 'html', text),
+                     lambda: self.client.send_widget(42, 'html', public_data=text),
+                     lambda: self.client.send_shared_widget(42, 'w', text),
+                     lambda: self.client.answer_widget_query('q', text),
+                     lambda: self.client.edit_message_widget_data(42, 7, text),
+                     lambda: self.client.edit_shared_widget_data('w', text),
+                     lambda: types.InputWidgetMessageContent(html='html', chat_data=text).to_dict(),
+                     lambda: types.InputSharedWidgetMessageContent(widget_id='w', chat_data=text).to_dict()):
+            with self.subTest(call=call), self.assertRaises(ValueError):
+                result = call()
+                if asyncio.iscoroutine(result):
+                    await result
+        self.http.assert_not_called()
+
+    async def test_edit_null_differs_from_omission_and_removal(self):
+        self.respond(True)
+        await self.client.edit_message_widget_data(42, 7, None, public_data=None)
+        self.assertEqual(self.payload('editMessageWidgetData'), {
+            'chat_id': 42, 'message_id': 7, 'chat_data': 'null', 'public_data': 'null'})
+
+    def test_inline_python_values_are_serialized(self):
+        content = types.InputWidgetMessageContent(html='html', chat_data={'v': 1}, public_data=[False, 0])
+        self.assertEqual(content.to_dict(), {
+            'html': 'html', 'chat_data': '{"v":1}', 'public_data': '[false,0]'})
+
+    async def test_query_legacy_raw_state_does_not_break_parsing(self):
+        for query_type, extra in ((types.WidgetQuery, {}),
+                                  (types.SharedWidgetQuery, {'widget_id': 'w'})):
+            query = await query_type._parse(self.client, {
+                'id': 'q', 'from': {'id': 5}, 'data': 'tap', 'type': {'type': 'data'},
+                'chat_data': 'plain text', 'public_data': '{"v":1}', **extra})
+            self.assertEqual((query.chat_data, query.public_data), ('plain text', {'v': 1}))
 
     async def test_shared_bound_decorator(self):
         callback = AsyncMock()

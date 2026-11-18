@@ -258,6 +258,11 @@ class Client(Methods):
             Pass the Bot API token to create a bot session, e.g.: "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
             Only applicable for new sessions.
 
+        widget_transport (``str``, *optional*):
+            Transport for widget methods and queries: "botapi" (the existing
+            HTTPS bridge and widget-only poller) or "mtproto" (native layer 233
+            calls and updates, with no extra poller). Defaults to "botapi".
+
         session_string (``str``, *optional*):
             Pass a session string to load the session in-memory.
             Implies ``in_memory=True``.
@@ -517,7 +522,8 @@ class Client(Methods):
         protocol_factory: Type[TCP] = TCPAbridged,
         loop: Optional[asyncio.AbstractEventLoop] = None,
         rate_limits: Optional[dict] = None,
-        auto_no_updates: Optional[bool] = True
+        auto_no_updates: Optional[bool] = True,
+        widget_transport: str = "botapi"
     ):
         super().__init__()
 
@@ -535,6 +541,9 @@ class Client(Methods):
         self.proxy = proxy
         self.test_mode = test_mode
         self.bot_token = bot_token
+        if widget_transport not in ("botapi", "mtproto"):
+            raise ValueError('widget_transport must be "botapi" or "mtproto"')
+        self.widget_transport = widget_transport
         self.session_string = session_string
         self.in_memory = in_memory
         self.phone_number = phone_number

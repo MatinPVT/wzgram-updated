@@ -75,6 +75,19 @@ CallbackQuery
 
     {callback_query_toctree}
 
+Widget Queries
+--------------
+
+.. hlist::
+    :columns: 2
+
+    {widget_query_hlist}
+
+.. toctree::
+    :hidden:
+
+    {widget_query_toctree}
+
 InlineQuery
 ------------
 

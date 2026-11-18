@@ -23,6 +23,7 @@ from pyrogram import types
 from ..object import Object
 from ..update import Update
 from .widget_query_type import WidgetQueryType
+from .widget import _parse_json_value
 
 
 _UNSET = object()
@@ -54,12 +55,13 @@ class WidgetQuery(Object, Update):
             Tap payload, 1-64 UTF-8 bytes.
 
         chat_data (JSON value, *optional*):
-            Current chat state, at most 1,024 bytes of JSON, when included
-            by the widget. Defaults to an empty object.
+            Legacy state extension, parsed from JSON when possible. Official
+            Bot API queries do not include state; keep it in bot storage.
+            Defaults to an empty object.
 
         public_data (JSON value, *optional*):
-            Public state, at most 1,024 bytes of JSON, when included.
-            Defaults to an empty object.
+            Legacy public state extension, parsed from JSON when possible.
+            Official Bot API queries do not include it. Defaults to an empty object.
 
         chat_instance (``str``, *optional*):
             Global identifier, uniquely corresponding to the chat to which
@@ -116,8 +118,32 @@ class WidgetQuery(Object, Update):
 
     @staticmethod
     async def _parse(client: "pyrogram.Client", widget_query: dict, users=None, chats=None) -> "WidgetQuery":
-        # Bot API dictionaries have no corresponding MTProto TL constructor.
-        from ...methods.bots._widget import parse_chat, parse_user, validate_data
+        if not isinstance(widget_query, dict):
+            from pyrogram import raw, utils
+            users, chats = users or {}, chats or {}
+            chat = None
+            inline_id = None
+            message_id = None
+            if isinstance(widget_query, raw.types.UpdateBotWidgetQuery):
+                peer = widget_query.peer
+                message_id = widget_query.msg_id
+                chat = types.Chat._parse_chat(client,
+                    users.get(peer.user_id) if isinstance(peer, raw.types.PeerUser)
+                    else chats.get(utils.get_raw_peer_id(peer)))
+            else:
+                inline_id = utils.pack_inline_message_id(widget_query.inline_message_id)
+            query_type = WidgetQueryType._parse(client, widget_query.query_type)
+            if hasattr(query_type, "wallet_card"):
+                query_type.wallet_card = widget_query.wallet_card
+            return WidgetQuery(
+                client=client, id=str(widget_query.query_id),
+                from_user=types.User._parse(client, users.get(widget_query.user_id)),
+                data=widget_query.data.decode("utf-8"), chat=chat, message_id=message_id,
+                inline_message_id=inline_id, chat_instance=str(widget_query.chat_instance),
+                chat_type=widget_query.chat_type, type=query_type,
+                widget_id=str(widget_query.widget_id) if widget_query.widget_id is not None else None
+            )
+        from ...methods.bots._widget import parse_chat, parse_user
 
         return WidgetQuery(
             client=client, id=str(widget_query["id"]),
@@ -126,8 +152,8 @@ class WidgetQuery(Object, Update):
             message_id=widget_query.get("message_id"),
             inline_message_id=widget_query.get("inline_message_id"),
             data=widget_query["data"],
-            chat_data=validate_data(widget_query.get("chat_data", {})),
-            public_data=validate_data(widget_query.get("public_data", {}), "public_data"),
+            chat_data=_parse_json_value(widget_query.get("chat_data", {}), "chat_data"),
+            public_data=_parse_json_value(widget_query.get("public_data", {}), "public_data"),
             chat_instance=widget_query.get("chat_instance"),
             chat_type=widget_query.get("chat_type"),
             type=WidgetQueryType._parse(client, widget_query.get("type")),

@@ -86,6 +86,9 @@ class ExternalReplyInfo(Object):
         checklist (:obj:`~pyrogram.types.Checklist`, *optional*):
             Message is a checklist.
 
+        widget (:obj:`~pyrogram.types.Widget`, *optional*):
+            Message contains an HTML widget.
+
         contact (:obj:`~pyrogram.types.Contact`, *optional*):
             Message is a shared contact, information about the contact.
 
@@ -137,6 +140,7 @@ class ExternalReplyInfo(Object):
         voice: Optional["types.Voice"] = None,
         has_media_spoiler: Optional[bool] = None,
         checklist: Optional["types.Checklist"] = None,
+        widget: Optional["types.Widget"] = None,
         contact: Optional["types.Contact"] = None,
         dice: Optional["types.Dice"] = None,
         game: Optional["types.Game"] = None,
@@ -167,6 +171,7 @@ class ExternalReplyInfo(Object):
         self.voice = voice
         self.has_media_spoiler = has_media_spoiler
         self.checklist = checklist
+        self.widget = widget
         self.contact = contact
         self.dice = dice
         self.game = game
@@ -214,10 +219,17 @@ class ExternalReplyInfo(Object):
         venue = None
 
         media = reply.reply_media
+        widget = None
         media_type = None
 
         if media:
-            if isinstance(media, raw.types.MessageMediaPhoto):
+            if isinstance(media, raw.types.MessageMediaWidget):
+                try:
+                    widget = types.Widget._parse(client, media)
+                    media_type = enums.MessageMediaType.WIDGET
+                except (ValueError, UnicodeError):
+                    media_type = enums.MessageMediaType.UNSUPPORTED
+            elif isinstance(media, raw.types.MessageMediaPhoto):
                 if media.live_photo:
                     doc = media.video
 
@@ -354,6 +366,7 @@ class ExternalReplyInfo(Object):
             location=location,
             poll=poll,
             venue=venue,
-            checklist=checklist
+            checklist=checklist,
+            widget=widget
         )
 
